@@ -6,7 +6,8 @@ Second, you needed to assign each of these subparts to a different thread.
 Third, you needed to synchronize them opportunely to avoid unwanted race conditions, wait for the completion of all threads, and 
 finally, combine the partial results.
     
-    Java 7 introduced a framework called fork/join to perform these operations more consistently and in a less error-prone way.
+    Java 7 introduced a framework called fork/join to perform these operations more consistently and
+    in a less error-prone way.
 
 ## Parallel streams
     
