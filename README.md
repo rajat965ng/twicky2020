@@ -304,3 +304,228 @@ Step 3, The framework keeps invoking the method trySplit on a Spliterator until 
 Step 4, This recursive splitting process terminates when all Spliterators have returned null to a trySplit invocation.
 
 <hr>
+
+# Chapter 8: Collection API enhancements
+
+## Collection factories
+
+A more convenient way to write this code is to use the Arrays.asList() factory method:
+
+    List<String> friends
+       = Arrays.asList("Raphael", "Olivia", "Thibaut");
+
+Attempting to add elements, for example, results in an Unsupported- ModificationException, but updating by using the method set is allowed:
+
+    List<String> friends = Arrays.asList("Raphael", "Olivia");
+    friends.set(0, "Richard");
+    
+    friends.add("Thibaut");
+    throws an UnsupportedOperationException 
+    
+This behavior seems slightly surprising because the underlying list is backed by a mutable array of fixed size.
+
+How about a Set? Unfortunately, there’s no Arrays.asSet() factory method, so you need another trick.
+
+    Set<String> friends "
+       = new HashSet<>(Arrays.asList("Raphael", "Olivia", Thibaut"));
+
+Alternatively you could use the Streams API:
+
+    Set<String> friends
+       = Stream.of("Raphael", "Olivia", "Thibaut")
+               .collect(Collectors.toSet());
+
+Both solutions, however, are far from elegant and involve unnecessary object allocations behind the scenes. Also note that you get a mutable Set as a result.
+
+### List factory
+
+    List<String> friends = List.of("Raphael", "Olivia", "Thibaut");
+    friends.add("Chih-Chun");
+    
+1. Running this code results in a java.lang.UnsupportedOperationException.
+2. List that’s produced is immutable.    
+
+### Set factory
+
+If you try to create a Set by providing a duplicated element, you receive an IllegalArgumentException.
+
+    Set<String> friends = Set.of("Raphael", "Olivia", "Olivia");
+
+
+### Map factories
+
+You have two ways to initialize an immutable map in Java 9.
+
+    Map<String, Integer> ageOfFriends
+       = Map.of("Raphael", 30, "Olivia", 25, "Thibaut", 26);
+    System.out.println(ageOfFriends);
+    
+This method is convenient if you want to create a small map of up to ten keys and values.     
+
+To go beyond this,
+
+    import static java.util.Map.entry;
+    Map<String, Integer> ageOfFriends
+           = Map.ofEntries(entry("Raphael", 30),
+                           entry("Olivia", 25),
+                           entry("Thibaut", 26));
+    System.out.println(ageOfFriends);
+
+
+### Working with List and Set
+
+removeIf(): removes element matching a predicate. It’s available on all classes that implement List or Set.   
+
+    transactions.removeIf(transaction ->
+                 Character.isDigit(transaction.getReferenceCode().charAt(0)));
+ 
+replaceAll(): is available on List and replaces elements using a (UnaryOperator) function.
+
+    referenceCodes.replaceAll(code -> Character.toUpperCase(code.charAt(0)) +
+                 code.substring(1));
+                 
+sort(): is also available on the List interface and sorts the list itself.
+
+## Working with Map
+
+### forEach
+
+Since Java 8, the Map interface has supported the forEach method, which accepts a BiConsumer, taking the key and value as arguments. 
+
+    ageOfFriends.forEach((friend, age) -> System.out.println(friend + " is " +
+                 age + " years old"));
+                 
+* A concern related to iterating over date is sorting it.
+
+### Sorting
+
+Two new utilities let you sort the entries of a map by values or keys:
+     Entry.comparingByValue 
+     Entry.comparingByKey                 
+    
+    
+    favouriteMovies
+      .entrySet()
+      .stream()
+      .sorted(Entry.comparingByKey())
+      .forEachOrdered(System.out::println);
+      
+### HashMap and Performance (New implementation of HashMap from Java8)
+
+1. The internal structure of a HashMap was updated in Java 8 to improve performance.
+2. Entries of a map typically are stored in buckets accessed by the generated hashcode of the key. But if many keys return the same hashcode, performance 
+   deteriorates because buckets are implemented as LinkedLists with O(n) retrieval.          
+3. But now, when the buckets become too big, they’re replaced dynamically with sorted trees, which have O(log(n)) retrieval and improve the lookup of colliding elements.    
+4. Use of sorted trees is possible only when the keys are Comparable (such as String or Number classes).
+
+### getOrDefault
+
+    Map<String, String> favouriteMovies
+                   = Map.ofEntries(entry("Raphael", "Star Wars"),
+                  entry("Olivia", "James Bond"));
+                  
+                  
+    System.out.println(favouriteMovies.getOrDefault("Olivia", "Matrix")); #O/P: Olivia
+    System.out.println(favouriteMovies.getOrDefault("Thibaut", "Matrix")); #O/P: Matrix
+    
+### Compute patterns
+
+Perform an operation conditionally and store its result, depending on whether a key is present or absent in a Map.              
+
+Three new operations can help:
+
+computeIfAbsent — If there’s no specified value for the given key (it’s absent or its value is null), calculate a new value by using the key and add it to the Map.
+computeIfPresent — If the specified key is present, calculate a new value for it and add it to the Map.   
+compute — This operation calculates a new value for a given key and stores it in the Map.
+
+    Map<String, byte[]> dataToHash = new HashMap<>();
+    MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
+            
+    lines.forEach(line -> dataToHash.computeIfAbsent(line,this::calculateDigest));       
+    
+    private byte[] calculateDigest(String key) {
+       return messageDigest.digest(key.getBytes(StandardCharsets.UTF_8));
+    } 
+    
+### Remove patterns
+
+    String key = "Raphael";
+    String value = "Jack Reacher 2";
+    if (favouriteMovies.containsKey(key) &&
+         Objects.equals(favouriteMovies.get(key), value)) {
+       favouriteMovies.remove(key);
+       return true;
+    } else {
+       return false;
+    }
+    
+    OR
+    
+    favouriteMovies.remove(key, value);
+    
+### Replacement patterns
+
+    Map<String, String> favouriteMovies = new HashMap<>(); 
+    favouriteMovies.put("Raphael", "Star Wars");
+    favouriteMovies.put("Olivia", "james bond"); 
+    favouriteMovies.replaceAll((friend, movie) -> movie.toUpperCase()); 
+    
+    System.out.println(favouriteMovies);  <-  {Olivia=JAMES BOND, Raphael=STAR WARS}
+    
+    
+### Merge
+
+    1. Map<String, String> family = Map.ofEntries(entry("Teo", "Star Wars"), entry("Cristina", "James Bond"));
+    Map<String, String> friends = Map.ofEntries(entry("Raphael", "Star Wars"));    
+    
+    Map<String, String> everyone = new HashMap<>(family);
+    everyone.putAll(friends);
+    
+    System.out.println(everyone);  <-  {Cristina=James Bond, Raphael= Star Wars, Teo=Star Wars}
+    
+
+    2. Map<String, String> everyone = new HashMap<>(family);
+    friends.forEach((k, v) -> everyone.merge(k, v, (movie1, movie2) -> movie1 + " & " + movie2));
+    
+    System.out.println(everyone);  <- Outputs {Raphael=Star Wars, Cristina= James Bond & Matrix, Teo=Star Wars}
+    
+    
+    3. Map<String, Long> moviesToCount = new HashMap<>();
+       String movieName = "JamesBond";
+       long count = moviesToCount.get(movieName);
+     
+       if(count == null) {
+          moviesToCount.put(movieName, 1);
+       }
+       else {
+          moviesToCount.put(moviename, count + 1);
+       }
+       
+       This code can be rewritten as
+       
+       moviesToCount.merge(movieName, 1L, (key, count) -> count + 1L);
+       
+## Improved ConcurrentHashMap
+
+    1. ConcurrentHashMap allows concurrent add and update operations that lock only certain parts of the internal data structure.
+    2. Thus, read and write operations have improved performance compared with the synchro- nized Hashtable alternative.
+    
+    ConcurrentHashMap supports three new kinds of operations:
+    
+     forEach—Performs a given action for each (key, value)
+     reduce—Combines all (key, value) given a reduction function into a result
+     search—Applies a function on each (key, value) until the function produces a non-null result       
+
+    Each kind of operation supports four forms.
+    
+     Operates with keys and values (forEach,reduce,search)
+     Operates with keys (forEachKey,reduceKeys,searchKeys)
+     Operates with values (forEachValue,reduceValues,searchValues)
+     Operates with Map.Entry objects (forEachEntry, reduceEntries, searchEntries)
+    
+    the reduceValues method to find the maximum value in the map:
+    
+    ConcurrentHashMap<String, Long> map = new ConcurrentHashMap<>();
+    long parallelismThreshold = 1;
+    Optional<Integer> maxValue = Optional.ofNullable(map.reduceValues(parallelismThreshold, Long::max));
+<hr>
