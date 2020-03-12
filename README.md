@@ -507,25 +507,228 @@ compute — This operation calculates a new value for a given key and stores it 
        
 ## Improved ConcurrentHashMap
 
-    1. ConcurrentHashMap allows concurrent add and update operations that lock only certain parts of the internal data structure.
-    2. Thus, read and write operations have improved performance compared with the synchro- nized Hashtable alternative.
+1. ConcurrentHashMap allows concurrent add and update operations that lock only certain parts of the internal data structure.
+2. Thus, read and write operations have improved performance compared with the synchro- nized Hashtable alternative.
     
-    ConcurrentHashMap supports three new kinds of operations:
+ConcurrentHashMap supports three new kinds of operations:
     
      forEach—Performs a given action for each (key, value)
      reduce—Combines all (key, value) given a reduction function into a result
      search—Applies a function on each (key, value) until the function produces a non-null result       
 
-    Each kind of operation supports four forms.
+Each kind of operation supports four forms.
     
      Operates with keys and values (forEach,reduce,search)
      Operates with keys (forEachKey,reduceKeys,searchKeys)
      Operates with values (forEachValue,reduceValues,searchValues)
      Operates with Map.Entry objects (forEachEntry, reduceEntries, searchEntries)
     
-    the reduceValues method to find the maximum value in the map:
+The reduceValues method to find the maximum value in the map:
     
     ConcurrentHashMap<String, Long> map = new ConcurrentHashMap<>();
     long parallelismThreshold = 1;
     Optional<Integer> maxValue = Optional.ofNullable(map.reduceValues(parallelismThreshold, Long::max));
 <hr>
+
+# Chapter 9: Refactoring, testing, and debugging
+
+## Refactoring for improved readability and flexibility
+
+Lambda expressions let you represent a piece of behavior in a more compact form compared with using anonymous classes. 
+Execute multiple behaviors passed as arguments to cope with requirement changes.
+
+
+### From anonymous classes to lambda expressions
+
+Instead of: 
+    
+    Runnable r1 = new Runnable() {
+        public void run(){
+            System.out.println("Hello");
+        }
+    }
+
+Use:
+
+    Runnable r2 = () -> System.out.println("Hello");
+    
+
+### From lambda expressions to method references
+
+Instead of: 
+
+    Map<CaloricLevel, List<Dish>> dishesByCaloricLevel =
+              menu.stream()
+                  .collect(
+                      groupingBy(dish -> {
+                        if (dish.getCalories() <= 400) return CaloricLevel.DIET;
+                        else if (dish.getCalories() <= 700) return CaloricLevel.NORMAL;
+                        else return CaloricLevel.FAT;
+    }));
+
+Use:         
+
+    Map<CaloricLevel, List<Dish>> dishesByCaloricLevel =
+                menu.stream().collect(groupingBy(Dish::getCaloricLevel));
+                
+    
+    
+    public class Dish{
+                ...
+                public CaloricLevel getCaloricLevel() {
+                    if (this.getCalories() <= 400) return CaloricLevel.DIET;
+                    else if (this.getCalories() <= 700) return CaloricLevel.NORMAL;
+                    else return CaloricLevel.FAT;
+                }
+    }            
+    
+Instead of: 
+
+    inventory.sort((Apple a1, Apple a2) -> a1.getWeight().compareTo(a2.getWeight()));    
+    
+Use:
+
+    inventory.sort(comparing(Apple::getWeight));
+
+
+Instead of:
+
+    int totalCalories = menu.stream().map(Dish::getCalories).reduce(0, (c1, c2) -> c1 + c2);    
+    
+Use:
+
+    int totalCalories = menu.stream().collect(summingInt(Dish::getCalories));
+    
+### From imperative data processing to Streams
+
+Instead of:
+
+    List<String> dishNames = new ArrayList<>();
+    for(Dish dish: menu) {
+        if(dish.getCalories() > 300) {
+            dishNames.add(dish.getName());
+        }
+    }    
+    
+Use:
+
+    menu.parallelStream()
+        .filter(d -> d.getCalories() > 300)
+        .map(Dish::getName)
+        .collect(toList());    
+        
+       
+Unfortunately, converting imperative code to the Streams API can be a difficult task, because you need to think about control flow statements such as 
+break, continue, and return and then infer the right stream operations to use.        
+
+The good news is that some tools (e.g., Lambda Ficator, https://ieeexplore.ieee.org/document/6606699) can help you with this task as well.
+
+
+### Improving code flexibility
+
+#### Conditional deferred execution
+
+Consider the following code, which uses the built-in Java Logger class:
+
+    if (logger.isLoggable(Log.FINER)) {
+                logger.finer("Problem: " + generateDiagnostic());
+    }
+
+What’s wrong with it ?
+
+1. The state of the logger (what level it supports) is exposed in the client code through the method isLoggable.
+2. Why should you have to query the state of the logger object every time before you log a message? It clutters your code.
+
+Solution.
+
+A better alternative is to use the log method, which checks internally to see whether the logger object is set to the right level before logging the message:
+
+    logger.log(Level.FINER, () -> "Problem: " + generateDiagnostic());
+    
+Consider introducing a new method that calls that method, passed as a lambda or method reference, only after internally checking the state of the object.     
+
+
+
+## Refactoring object-oriented design patterns with lambdas
+
+### Strategy
+
+If you think about it, lambda expressions encapsulate a piece of code (or strategy), which is what the strategy design pattern was created for, so we recommend 
+that you use lambda expressions instead for similar problems.
+
+
+    Validator numericValidator =  new Validator((String s) -> s.matches("[a-z]+"));     <-      Passing a lambda directly
+    boolean b1 = numericValidator.validate("aaaa");
+
+    Validator lowerCaseValidator = new Validator((String s) -> s.matches("\\d+"));      <-      Passing a lambda directly
+    boolean b2 = lowerCaseValidator.validate("bbbb");
+
+### Template method
+
+The template method design pattern is a common solution when you need to repre- sent the outline of an algorithm and have the additional flexibility to change 
+certain parts of it.
+
+Instead of:
+
+    abstract class OnlineBanking {
+       public void processCustomer(int id){
+            Customer c = Database.getCustomerWithId(id);
+            makeCustomerHappy(c);
+       }
+       abstract void makeCustomerHappy(Customer c);
+    }
+    
+    
+Use:
+
+    public void processCustomer(int id, Consumer<Customer> makeCustomerHappy) {
+                Customer c = Database.getCustomerWithId(id);
+                makeCustomerHappy.accept(c);
+    }
+
+
+    new OnlineBankingLambda().processCustomer(1337, (Customer c) ->
+                 System.out.println("Hello " + c.getName());
+
+
+### Observer
+
+The observer design pattern is a common solution when an object (called the subject) needs to automatically notify a list of other objects (called observers) 
+when some event happens (such as a state change)
+
+
+    f.registerObserver((String tweet) -> {
+            if(tweet != null && tweet.contains("money")){
+                System.out.println("Breaking news in NY! " + tweet);
+            }
+    });
+    f.registerObserver((String tweet) -> {
+            if(tweet != null && tweet.contains("queen")){
+                System.out.println("Yet more news from London... " + tweet);
+    }
+    });
+    
+    
+### Chain of responsibility
+
+UnaryOperator<String> headerProcessing = (String text) -> "From Raoul, Mario and Alan: " + text;
+UnaryOperator<String> spellCheckerProcessing = (String text) -> text.replaceAll("labda", "lambda");
+Function<String, String> pipeline =  headerProcessing.andThen(spellCheckerProcessing);
+String result = pipeline.apply("Aren't labdas really sexy?!!");    
+
+
+### Factory
+
+    final static Map<String, Supplier<Product>> map = new HashMap<>();
+    static {
+        map.put("loan", Loan::new);
+        map.put("stock", Stock::new);
+        map.put("bond", Bond::new);
+    }
+
+
+    public static Product createProduct(String name){
+        Supplier<Product> p = map.get(name);
+        if(p != null) return p.get();
+        throw new IllegalArgumentException("No such product " + name);
+    }
