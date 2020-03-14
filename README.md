@@ -732,3 +732,247 @@ String result = pipeline.apply("Aren't labdas really sexy?!!");
         if(p != null) return p.get();
         throw new IllegalArgumentException("No such product " + name);
     }
+
+<hr>
+
+# Chapter 10: Domain-specific languages using lambdas
+
+ For a DSL to interact with the database instead of writing pure Java code, technically, this type of DSL is called EXTERNAL because it expects the database to 
+ have an API that can parse and evaluate SQL expressions written in text.
+ 
+ But, for the following code:
+ 
+             menu.stream()
+                 .filter(d -> d.getCalories() < 400)
+                 .map(Dish::getName)
+                 .forEach(System.out::println)
+
+
+ In this case, this DSL isn’t external, but internal. In an internal DSL, the application-level primitives are exposed as Java methods to use on one or more 
+ class types that represent the database, in contrast to the non-Java syntax for primitives in an external DSL, such as SELECT FROM in the SQL discussion above.
+ 
+ 
+ ## A specific language for your domain
+ 
+ A DSL isn’t a general-purpose programming language; it restricts the operations and vocabulary available to a specific domain, which means that you have less to 
+ worry about and can invest more attention in solving the business problem at hand.
+ 
+ Two reasons should drive you toward the development of a DSL:
+ 
+     Communication is king. Your code should clearly communicate its intentions and be understandable even by a non-programmer.
+     
+     Code is written once but read many times. Readability is vital for maintainability. In other words, you should always code in a way that your colleagues thank you 
+     for rather than hate you for!
+ 
+ ### Pros and cons of DSLs
+
+ DSLs offer the following benefits:
+ 
+ 1. Readability — Using words that belong to the vocabulary of the domain makes the code understandable even by domain non-experts.
+ 2. Maintainability — Code written against a well-designed DSL is easier to maintain and modify.
+ 3. Higher level of abstraction
+ 4. Separation of concerns
+ 5. Focus
+ 
+ Introducing DSL into your code base can have a few disadvantages:
+ 
+ 1. Development cost
+ 2. Additional indirection layer - performance problems.
+ 3. Another language to learn
+ 4. Hosting-language limitations
+ 
+ ### Different DSL solutions available on the JVM
+
+ #### INTERNAL DSL
+
+ 1. Less The effort of learning the patterns and techniques.
+ 2. Your DSL is written in plain Java, so it’s compiled with the rest of your code.
+ 3. Your development team won’t need to get familiar with a different language 
+
+ #### POLYGLOT DSL
+
+ Suppose that you want to build a utility function that repeats the execution of another function, f, a given number of times.
+ As a first attempt, you could end up with the following recursive implementation in Scala.  
+
+    def times(i: Int, f: => Unit): Unit = {
+      f
+      if (i > 1) times(i - 1, f)
+    } 
+
+ Note that in Scala, invoking this function with large values of i won’t cause a stack overflow, as would happen in Java, because Scala has the tail call 
+ optimization, which means that the recursive invocation to the times function won’t be added to the stack. 
+ 
+
+    3 times {
+      println("Hello World")
+    }
+    
+  The result has no syntactic noise, and it’s easily understandable even by a non-developer. Here, the number 3 is automatically converted by the compiler in an 
+  instance of a class that stores the number in its i field. Then the times function is invoked with dotless notation, taking as an argument the function to be 
+  repeated.    
+
+  Similar result in Java is impossible, so the advantages of using a more DSL-friendly language are obvious.
+
+ #### EXTERNAL DSL
+ 
+ In this case, you have to design a new language from the ground up, with its own syn- tax and semantics. You also need to set up a separate infrastructure 
+ to parse the new language, analyze the output of the parser, and generate the code to execute your external DSL. 
+ 
+ If you do want to go down this road, ANTLR is a parser generator that’s commonly used to help and that goes hand in hand with Java.
+ 
+ The biggest advantage in developing an external DSL is the practically unlimited degree of flexibility that it provides.
+ 
+ 
+ ## Small DSLs in modern Java APIs
+ 
+    Collections.sort(people, (p1, p2) -> p1.getAge() - p2.getAge());
+
+ OR
+ 
+    Collections.sort(persons, comparing(p -> p.getAge()));
+ 
+ OR
+ 
+    Collections.sort(persons, comparing(Person::getAge));
+
+ OR 
+ 
+    persons.sort(comparing(Person::getAge).thenComparing(Person::getName));
+
+ This small API is a minimal DSL for the domain of collection sorting. 
+
+
+ ### The Stream API seen as a DSL to manipulate collections
+
+ A Stream can be seen as a compact but powerful DSL that fil- ters, sorts, transforms, groups, and manipulates the items of a collection. 
+ 
+ ### Collectors as a DSL to aggregate data
+
+    Map<String, Map<Color, List<Car>>> carsByBrandAndColor =
+            cars.stream().collect(groupingBy(Car::getBrand,
+                                             groupingBy(Car::getColor)));
+
+
+## Patterns and techniques to create DSLs in Java
+
+ The first thing is plain Java beans modeling a stock quoted on a given market:
+ 
+    public class Stock {
+        private String symbol;
+        private String market;
+ 
+        Setter & Getters ...
+    }
+    
+    
+    public class Trade {
+        public enum Type { BUY, SELL }
+        private Type type;
+        private Stock stock;
+        private int quantity;
+        private double price;
+    }
+    
+    
+    public class Order {
+        private String customer;
+        private List<Trade> trades = new ArrayList<>();
+        public void addTrade(Trade trade) {
+            trades.add(trade);
+        }
+        public double getValue() {
+                return trades.stream().mapToDouble(Trade::getValue).sum();
+        }
+    }
+
+### Method chaining
+
+    Order order = forCustomer( "BigBank" )
+                      .buy( 80 )
+                      .stock( "IBM" )
+                          .on( "NYSE" )
+                      .at( 125.00 )
+                      .sell( 50 )
+                      .stock( "GOOGLE" )
+                          .on( "NASDAQ" )
+                      .at( 375.00 )
+                   .end();
+
+
+ This code looks like a big improvement, doesn’t it? You need a few builders that create the objects of this domain through a fluent API. 
+ 
+       public class MethodChainingOrderBuilder {
+           public final Order order = new Order();
+        
+            forCustomer()
+            buy()
+            sell()
+            addTrade()
+            end()
+       }
+       
+       public class TradeBuilder {
+        
+           private final MethodChainingOrderBuilder builder;
+           public final Trade trade = new Trade();
+       
+           public StockBuilder stock(String symbol) {
+             return new StockBuilder(builder, trade, symbol);
+           }
+       }
+       
+       public class StockBuilder {
+           private final MethodChainingOrderBuilder builder;
+           private final Trade trade;
+           private final Stock stock = new Stock();
+       }
+       
+       public class TradeBuilderWithStock {
+           private final MethodChainingOrderBuilder builder;
+           private final Trade trade;
+       }
+       
+       
+### Using nested functions
+
+Pattern takes its name from the fact that it populates the domain model by using functions that are nested within other functions. 
+
+    Order order = order("BigBank",
+                                buy(80,
+                                    stock("IBM", on("NYSE")),
+                                    at(125.00)),
+                                sell(50,                     
+                                    stock("GOOGLE", on("NASDAQ")),
+                                    at(375.00))
+    );
+
+### Function sequencing with lambda expressions
+
+The next DSL pattern employs a sequence of functions defined with lambda expressions.    
+
+
+    Order order = order( o -> {
+                o.forCustomer( "BigBank" );
+                o.buy( t -> {
+                    t.quantity( 80 );
+                    t.price( 125.00 );
+                    t.stock( s -> {
+                        s.symbol( "IBM" );
+                        s.market( "NYSE" );
+                    } );
+                });
+                o.sell( t -> {
+                    t.quantity( 50 );
+                    t.price( 375.00 );
+                    t.stock( s -> {
+                        s.symbol( "GOOGLE" );
+                        s.market( "NASDAQ" );
+                    } );
+    });
+    } );
+    
+
+## Real World Java 8 DSL
+    
+![](images/e4ecbb15.png)
+
