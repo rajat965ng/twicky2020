@@ -976,3 +976,174 @@ The next DSL pattern employs a sequence of functions defined with lambda express
     
 ![](images/e4ecbb15.png)
 
+# Chapter 11: Using Optional as a better alternative to null
+
+## Introducing the Optional class
+
+java.util.Optional<T> that’s inspired by Haskell and Scala.
+
+The absence of a value is modeled with an empty optional returned by the method Optional.empty. 
+This static factory method returns a special singleton instance of the Optional class.
+
+    public class Person {
+        private Optional<Car> car;
+        public Optional<Car> getCar() { return car; }
+    }
+    
+    public class Car {
+        private Optional<Insurance> insurance;
+        public Optional<Insurance> getInsurance() { return insurance; }
+    }
+    
+    public class Insurance {
+        private String name;
+        public String getName() { return name; }
+    }
+
+The fact that a person references an Optional<Car>, and a car references an Optional <Insurance>, 
+makes it explicit in the domain that a person may or may not own a car, and that car may or may not be insured.    
+
+The fact that the name of the insurance company is declared of type String instead of Optional<String> makes it evident that an insurance company must have a name.
+
+You know for certain whether you’ll get a NullPointerException when dereferencing the name of an insurance company; you don’t have to add a null check, 
+because doing so will hide the problem instead of fixing it.
+
+Consistently using Optional values creates a clear distinction between a missing value that’s planned for and a value that’s 
+absent only because of a bug in your algorithm or a problem in your data.
+
+## Patterns for adopting Optionals
+
+### Creating Optional objects
+
+#### EMPTY OPTIONAL
+
+    Optional<Car> optCar = Optional.empty();
+    
+#### OPTIONAL FROM A NON-NULL VALUE
+
+    Optional<Car> optCar = Optional.of(car);
+
+#### OPTIONAL FROM NULL
+
+by using the static factory method Optional.ofNullable, you can create an Optional object that may hold a null value:
+
+    Optional<Car> optCar = Optional.ofNullable(car);
+    
+### Extracting and transforming values from Optionals with map
+
+Instead of :
+
+    String name = null;
+    if(insurance != null){
+        name = insurance.getName();
+    }
+ 
+Use:
+
+    Optional<Insurance> optInsurance = Optional.ofNullable(insurance);
+    Optional<String> name = optInsurance.map(Insurance::getName);
+    
+### Chaining Optional objects with flatMap
+
+    Optional<Person> optPerson = Optional.of(person);
+    Optional<String> name =
+        optPerson.map(Person::getCar)
+                 .map(Car::getInsurance)
+                 .map(Insurance::getName);
+
+Unfortunately, this code doesn’t compile. Why? The variable optPerson is of type Optional<Person>, so it’s perfectly fine to call the map method. But getCar
+returns an object of type Optional<Car> (as presented in listing 11.4), which means that the result of the map operation is an object of type Optional<Optional<Car>>.
+As a result, the call to getInsurance is invalid because the outermost optional contains as its value another optional, which of course doesn’t support the get-Insurance method.
+
+Instead use: 
+
+    return person.flatMap(Person::getCar)
+     .flatMap(Car::getInsurance)
+    .map(Insurance::getName)
+    .orElse("Unknown");
+    
+    
+### Manipulating a stream of optionals
+
+The Optional’s stream() method, introduced in Java 9, allows you to convert an Optional with a value to a Stream containing only that value or an empty Optional to an equally empty Stream. 
+
+    return persons.stream()
+        .map(Person::getCar)
+        .map(optCar -> optCar.flatMap(Car::getInsurance))
+        .map(optIns -> optIns.map(Insurance::getName))
+        .flatMap(Optional::stream)       <------  Transform the Stream<Optional<String>> into a Stream<String> containing only the present names.
+        .collect(toSet());
+                                     
+                                     
+### Default actions and unwrapping an Optional
+
+get() is the simplest but also the least safe of these methods. It returns the wrapped value if one is present and throws a NoSuchElementException other- wise. 
+
+orElse(T other), it allows you to provide a default value when the optional doesn’t contain a value.                                     
+
+orElseGet(Supplier<? extends T> other) is the lazy counterpart of the orElse method, because the supplier is invoked only if the optional contains no value.
+
+or(Supplier<? extends Optional<? extends T>> supplier) is similar to the former orElseGet method, but it doesn’t unwrap the value inside the Optional, if present. 
+
+orElseThrow(Supplier<? extends X> exceptionSupplier) is similar to the get method in that it throws an exception when the optional is empty, but it allows you to 
+choose the type of exception that you want to throw.
+
+
+ifPresent(Consumer<?superT>consumer)lets you execute the action given as argument if a value is present; otherwise, no action is taken.
+
+#### Java 9 introduced an additional instance method:
+
+ifPresentOrElse(Consumer<?superT>action,Runnable emptyAction). This differs from ifPresent by taking a Runnable that gives an empty-based action to be executed when the Optional is empty.
+
+
+### Combining two Optionals
+
+Instead of:
+
+    public Insurance findCheapestInsurance(Person person, Car car) {
+                // queries services provided by the different insurance companies
+                // compare all those data
+                return cheapestCompany;
+    }
+    
+Use: 
+
+    public Optional<Insurance> nullSafeFindCheapestInsurance(
+                                          Optional<Person> person, Optional<Car> car) {
+                if (person.isPresent() && car.isPresent()) {
+                    return Optional.of(findCheapestInsurance(person.get(), car.get()));
+                } else {
+                    return Optional.empty();
+                }
+    }
+    
+### Rejecting certain values with filter
+
+Instead Of:
+
+    Insurance insurance = ...;
+    if(insurance != null && "CambridgeInsurance".equals(insurance.getName())){
+      System.out.println("ok");
+    }
+
+Use:
+
+    Optional<Insurance> optInsurance = ...;
+    optInsurance.filter(insurance ->
+                            "CambridgeInsurance".equals(insurance.getName()))
+                .ifPresent(x -> System.out.println("ok"));
+
+## Practical examples of using Optional
+
+### Wrapping a potentially null value in an Optional
+
+Supposing that you have a Map<String, Object>, accessing the value indexed by key with
+        
+    Object value = map.get("key");
+
+returns null if there’s no value in the map associated with the String "key".
+
+    Optional<Object> value = Optional.ofNullable(map.get("key"));
+
+    
+                
