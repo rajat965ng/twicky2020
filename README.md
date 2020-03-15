@@ -976,6 +976,8 @@ The next DSL pattern employs a sequence of functions defined with lambda express
     
 ![](images/e4ecbb15.png)
 
+<hr>
+
 # Chapter 11: Using Optional as a better alternative to null
 
 ## Introducing the Optional class
@@ -1146,4 +1148,161 @@ returns null if there’s no value in the map associated with the String "key".
     Optional<Object> value = Optional.ofNullable(map.get("key"));
 
     
-                
+<hr>
+
+# Chapter 12: New Date and Time API
+
+
+Problems with Date class in Java 1.0:
+
+1. this class doesn’t represent a date, but a point in time with milli- second precision.
+2. the years start from 1900, whereas the months start at index 0.
+3. even the String returned by the toString method of the Date class could be quite misleading. 
+4. both Date and Calendar are mutable classes. 
+
+The consequence is that all these flaws and inconsistencies have encouraged the use of third-party date and time libraries, such as Joda-Time. 
+
+## LocalDate, LocalTime, LocalDateTime, Instant, Duration, and Period
+
+### Working with LocalDate and LocalTime
+
+An instance of this class is an immutable object representing a plain date without the time of day. In particular, it doesn’t carry any 
+information about the time zone.
+
+
+    LocalDate date = LocalDate.of(2017, 9, 21); 2017-09-21
+    int year = date.getYear();
+    Month month = date.getMonth();
+    int day = date.getDayOfMonth();
+    DayOfWeek dow = date.getDayOfWeek();
+    int len = date.lengthOfMonth();
+    boolean leap = date.isLeapYear();
+    
+    LocalDate today = LocalDate.now();
+    
+Like the LocalDate class, the LocalTime class provides some getter methods to access its values.
+
+    LocalTime time = LocalTime.of(13, 45, 20); 13:45:20
+    int hour = time.getHour();
+    int minute = time.getMinute();
+    int second = time.getSecond();       
+    
+    
+### Combining a date and a time    
+
+The composite class called LocalDateTime pairs a LocalDate and a LocalTime.
+
+    LocalDateTime dt1 = LocalDateTime.of(2017, Month.SEPTEMBER, 21, 13, 45, 20);
+    LocalDateTime dt2 = LocalDateTime.of(date, time);
+    LocalDateTime dt3 = date.atTime(13, 45, 20);
+    LocalDateTime dt4 = date.atTime(time);
+    LocalDateTime dt5 = time.atDate(date);
+
+
+### Instant: a date and time for machines
+
+java.time.Instant class, which represents the number of seconds passed since the Unix epoch time, set by convention to midnight of January 1, 1970 UTC.
+
+
+    Instant.ofEpochSecond(3);
+    Instant.ofEpochSecond(3, 0);
+    Instant.ofEpochSecond(2, 1_000_000_000);   <---- One billion nanoseconds (1 second) after 2 seconds
+    Instant.ofEpochSecond(4, -1_000_000_000);  <---- One billion nanoseconds (1 second) before 4 seconds
+    
+
+### Defining a Duration or a Period
+
+Create a duration between two LocalTimes, two LocalDateTimes, or two Instants as follows:
+
+    Duration d1 = Duration.between(time1, time2);
+    Duration d1 = Duration.between(dateTime1, dateTime2);
+    Duration d2 = Duration.between(instant1, instant2);
+
+
+Because LocalDateTime and Instant are made for different purposes, one to be used by humans and the other by machines, you’re not allowed to mix them. 
+If you try to create a duration between them, you’ll only obtain a DateTimeException.
+
+Because the Duration class is used to represent an amount of time measured in sec- onds and eventually nanoseconds, you can’t pass a LocalDate to the between method.
+
+
+You can find out the difference between two LocalDates with the between factory method of that class:
+
+    Period tenDays = Period.between(LocalDate.of(2017, 9, 11), LocalDate.of(2017, 9, 21));
+    
+
+## Manipulating, parsing, and formatting dates
+
+    LocalDate date1 = LocalDate.of(2017, 9, 21);
+    LocalDate date2 = date1.plusWeeks(1);
+    LocalDate date3 = date2.minusYears(6);
+    LocalDate date4 = date3.plus(6, ChronoUnit.MONTHS);
+    
+ 
+### Working with TemporalAdjusters
+
+Sometimes, though, you need to perform advanced operations, such as adjusting a date to the next Sunday, the next working day, or the last day of the month. 
+
+You can pass to an overloaded version of the with method a TemporalAdjuster that provides a more customizable way to define the manipulation needed to operate on a specific date.       
+
+    import static java.time.temporal.TemporalAdjusters.*;
+    LocalDate date1 = LocalDate.of(2014, 3, 18);
+    LocalDate date2 = date1.with(nextOrSame(DayOfWeek.SUNDAY));
+    LocalDate date3 = date2.with(lastDayOfMonth());
+    
+#### Implementing a custom TemporalAdjuster
+
+Q. Develop a class named NextWorkingDay, implementing the TemporalAdjuster
+interface that moves a date forward by one day but skips Saturdays and Sundays. Using
+
+    date = date.with(new NextWorkingDay());
+
+should move the date to the next day, if this day is between Monday and Friday, but to the next Monday if it’s a Saturday or a Sunday.
+
+
+Ans. 
+
+    public class NextWorkingDay implements TemporalAdjuster {
+      
+        @Override
+        public Temporal adjustInto(Temporal temporal) {
+            DayOfWeek dow = DayOfWeek.of(temporal.get(ChronoField.DAY_OF_WEEK));
+            int dayToAdd = 1;
+            if (dow == DayOfWeek.FRIDAY) dayToAdd = 3;
+            else if (dow == DayOfWeek.SATURDAY) dayToAdd = 2;
+            return temporal.plus(dayToAdd, ChronoUnit.DAYS);
+            }
+    
+    }
+    
+### Printing and parsing date-time objects
+
+    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+    LocalDate date1 = LocalDate.of(2014, 3, 18);
+    String formattedDate = date1.format(formatter);
+    LocalDate date2 = LocalDate.parse(formattedDate, formatter);
+
+
+## Working with different time zones and calendars
+
+### Using time zones
+
+    ZoneId romeZone = ZoneId.of("Europe/Rome");
+    
+    ZoneId zoneId = TimeZone.getDefault().toZoneId();
+
+    LocalDate date = LocalDate.of(2014, Month.MARCH, 18);
+    ZonedDateTime zdt1 = date.atStartOfDay(romeZone);
+    LocalDateTime dateTime = LocalDateTime.of(2014, Month.MARCH, 18, 13, 45);
+    ZonedDateTime zdt2 = dateTime.atZone(romeZone);
+    Instant instant = Instant.now();
+    ZonedDateTime zdt3 = instant.atZone(romeZone);
+
+### Fixed offset from UTC/Greenwich
+
+    ZoneOffset newYorkOffset = ZoneOffset.of("-05:00");
+    
+            
+<hr>
+
+# Chapter 13: Default methods
+        
