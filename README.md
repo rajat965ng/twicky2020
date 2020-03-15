@@ -1305,4 +1305,222 @@ Ans.
 <hr>
 
 # Chapter 13: Default methods
-        
+
+First, Java 8 allowed static methods inside interfaces. 
+Second, Java 8 introduced a new feature called default methods that allows you to provide a default implementation for methods in an interface.         
+
+Two examples you’ve seen are sort in the List interface and stream in the Collection interface.
+
+    default void sort(Comparator<? super E> c){
+        Collections.sort(this, c);
+    }
+
+The stream method in Collection looks like this:    
+
+    default Stream<E> stream() {
+        return StreamSupport.stream(spliterator(), false);
+    }
+    
+
+## Evolving APIs
+
+### API version 1
+
+The first version of your Resizable interface has the following methods:
+
+    public interface Resizable extends Drawable{
+                int getWidth();
+                int getHeight();
+                void setWidth(int width);
+                void setHeight(int height);
+                void setAbsoluteSize(int width, int height);
+    }
+
+    public class Ellipse implements Resizable {
+                ...
+    }
+    
+### API version 2
+
+    public interface Resizable {
+        int getWidth();
+        int getHeight();
+        void setWidth(int width);
+        void setHeight(int height);
+        void setAbsoluteSize(int width, int height);
+        void setRelativeSize(int wFactor, int hFactor);    <------ Adding a new method for API version 2
+    }        
+    
+    
+PROBLEMS FOR YOUR USERS
+
+First, the interface now demands an implementation of setRelativeSize, but the Ellipse implementation that your user created doesn’t implement the 
+method setRelativeSize.
+
+
+Second, if the user tries to rebuild his entire application (including Ellipse), he’ll get the following compile error:
+
+
+    lambdasinaction/chap9/Ellipse.java:6: error: Ellipse is not abstract and does not override abstract method setRelativeSize(int,int) in Resizable
+    
+Consequently, updating a published API creates backward incompatibilities, which is why evolving existing APIs, such as the official Java Collections API, 
+causes problems for users of the APIs.
+
+
+In this case, default methods come to the rescue. They let library designers evolve APIs without breaking existing code 
+because classes that implement an updated interface automatically inherit a default implementation.     
+
+## Default methods in a nutshell
+
+    public interface Sized {
+        int size();
+        default boolean isEmpty() {
+            return size() == 0;
+        }
+    }
+
+Your library don’t have to modify all their classes that implement Resizable), use a default method and provide a default implementation for setRelativeSize, 
+as follows:    
+    
+    default void setRelativeSize(int wFactor, int hFactor){
+        setAbsoluteSize(getWidth() / wFactor, getHeight() / hFactor);
+    }
+
+
+## Usage patterns for default methods
+
+### Optional methods
+
+With default methods, you can provide a default implementation for such methods, so concrete classes don’t need to explicitly provide an empty implementation. 
+The Iterator interface in Java 8 provides a default implementation for remove as follows:    
+
+
+    interface Iterator<T> { boolean hasNext();
+    T next();
+    default void remove() {
+            throw new UnsupportedOperationException();
+        }
+    }
+    
+### Multiple inheritance of behavior
+
+
+As a result, an ArrayList is a direct subtype of seven types: AbstractList, List, RandomAccess, Cloneable, Serializable, Iterable, and Collection.     
+
+
+
+## Resolution rules
+
+    public interface A {
+        default void hello() {
+            System.out.println("Hello from A");
+        }
+    }
+    
+    public interface B extends A {
+        default void hello() {
+            System.out.println("Hello from B");
+        } 
+    }
+    
+    public class C implements B, A {
+        public static void main(String... args) {
+            new C().hello();   <---- What gets printed?
+        }
+    }
+    
+    
+1. Classes always win. A method declaration in the class or a superclass takes prior- ity over any default method declaration.
+
+2. Otherwise, sub-interfaces win: the method with the same signature in the most specific default-providing interface is selected. (If B extends A, B is more specific than A.)
+
+3. Finally, if the choice is still ambiguous, the class inheriting from multiple inter- faces has to explicitly select which default method implementation to use by overriding it and calling the desired method explicitly.
+
+
+    Inheriting from a class and implementing two interfaces
+    
+    public class D implements A{ }
+    public class C extends D implements B, A {
+        public static void main(String... args) {
+            new C().hello();
+        }
+    }
+    
+    
+Rule 1 says that a method declaration in the class takes priority. But D doesn’t override hello; it implements interface A. Consequently, it has a default 
+method from interface A. 
+    
+Rule 2 says that if there are no methods in the class or superclass, the method with the most specific default-providing interface is selected. 
+The compiler, therefore, has a choice between the hello method from interface A and the hello method from interface B. 
+    
+Because B is more specific (B extends A), the program prints "Hello from B" again.
+
+
+
+    public class D implements A{
+        void hello(){
+            System.out.println("Hello from D");
+        }
+    }
+    public class C extends D implements B, A {
+        public static void main(String... args) {
+            new C().hello();
+        }
+    }
+    
+The program prints "Hello from D" because a method declaration from a superclass has priority, as stated by rule 1.
+
+### Conflicts and explicit disambiguation
+
+
+    Implementing two interfaces  
+    
+    public interface A {
+        default void hello() {
+            System.out.println("Hello from A");
+        }
+    }
+    public interface B {
+        default void hello() {
+            System.out.println("Hello from B");
+    } }
+    
+    public class C implements B, A { }
+    
+Rule 2 doesn’t help you now because there’s no more-specific interface to select. Both hello methods from A and B could be valid options. 
+
+Thus, the Java compiler produces a compile error because it doesn’t know which method is more suitable: 
+    "Error: class C inherits unrelated defaults for hello() from types B and A."      
+
+#### RESOLVING THE CONFLICT    
+
+    public class C implements B, A {
+        void hello(){
+            B.super.hello();  <--- Explicitly choosing to call the method from interface B
+        }
+    }
+    
+    
+    
+    
+### Diamond problem
+
+    public interface A{
+        default void hello(){
+            System.out.println("Hello from A");
+        }
+    }
+    public interface B extends A { }
+    public interface C extends A { }
+    public class D implements B, C {
+        public static void main(String... args) {
+            new D().hello();    <------  What gets printed ?
+        }
+    }    
+    
+    
+What default method declaration does D inherit: the one from B or the one from C ?
+
+Only A declares a default method. Because the interface is a superinterface of D, the code prints "Hello from A".
+
+
