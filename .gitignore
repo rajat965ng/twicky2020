@@ -1,0 +1,5 @@
+.gitsecret/keys/random_seed
+!*.secret
+configs/mydock.txt
+.gpg
+*.gpg
