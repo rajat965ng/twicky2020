@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 
@@ -17,16 +16,18 @@ func NewProduct(l *log.Logger) *Product {
 }
 
 func (p *Product) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
+	if rr.Method == http.MethodGet {
+		getProducts(rw, rr)
+		return
+	}
 
-	products := data.GetProducts()
-	encoder := json.NewEncoder(rw)
-	err := encoder.Encode(products)
+	rw.WriteHeader(http.StatusNotImplemented)
+}
+
+func getProducts(rw http.ResponseWriter, rr *http.Request) {
+	lp := data.GetProducts()
+	err := lp.ToJSON(rw)
 	if err != nil {
 		http.Error(rw, "Unable to parse product list", http.StatusInternalServerError)
 	}
-	// product, err := json.Marshal(products)
-	// if err != nil {
-	// 	http.Error(rw, "Unable to parse product list", http.StatusInternalServerError)
-	// }
-	// rw.Write(product)
 }
