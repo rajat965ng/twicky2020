@@ -26,6 +26,7 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 		WriteTimeout: 1 * time.Second,
 		ReadTimeout:  1 * time.Second,
+		ErrorLog:     l,
 	}
 
 	go func() {
