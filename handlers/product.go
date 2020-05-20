@@ -17,7 +17,13 @@ func NewProduct(l *log.Logger) *Product {
 
 func (p *Product) ServeHTTP(rw http.ResponseWriter, rr *http.Request) {
 	if rr.Method == http.MethodGet {
+		p.l.Println("Invoking GET call")
 		getProducts(rw, rr)
+		return
+	}
+	if rr.Method == http.MethodPost {
+		p.l.Println("Invoking POST call")
+		addProduct(rw, rr)
 		return
 	}
 
@@ -30,4 +36,14 @@ func getProducts(rw http.ResponseWriter, rr *http.Request) {
 	if err != nil {
 		http.Error(rw, "Unable to parse product list", http.StatusInternalServerError)
 	}
+}
+
+func addProduct(rw http.ResponseWriter, rr *http.Request) {
+	p := &data.Product{}
+	err := p.FromJSON(rr.Body)
+	if err != nil {
+		http.Error(rw, "Unable to parse JSON.", http.StatusBadRequest)
+	}
+	plist := data.AddProduct(p)
+	plist.ToJSON(rw)
 }

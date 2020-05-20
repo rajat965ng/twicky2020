@@ -23,6 +23,15 @@ func GetProducts() Products {
 	return ProductList
 }
 
+func AddProduct(p *Product) Products {
+	ProductList = append(ProductList, p)
+	return ProductList
+}
+
+func (p *Product) FromJSON(r io.Reader) error {
+	return json.NewDecoder(r).Decode(p)
+}
+
 func (p *Products) ToJSON(w io.Writer) error {
 	return json.NewEncoder(w).Encode(p)
 }
